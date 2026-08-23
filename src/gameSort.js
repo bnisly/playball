@@ -15,11 +15,14 @@ export function compareGameInnings(a, b) {
   if (inningCompare !== 0) {
     return inningCompare;
   }
-  if (a.isTopInning && !b.isTopInning) {
-    return -1;
-  }
-  if (b.isTopInning && !a.isTopInning) {
+  // isTopInning lives on the linescore, not the game itself. Within the same
+  // inning number, the bottom half is further along than the top half, so it
+  // should sort first to stay consistent with "deepest game first".
+  if (a.linescore.isTopInning && !b.linescore.isTopInning) {
     return 1;
+  }
+  if (b.linescore.isTopInning && !a.linescore.isTopInning) {
+    return -1;
   }
   return 0;
 }

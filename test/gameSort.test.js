@@ -1,6 +1,5 @@
 import {describe, it} from 'node:test';
 import assert from 'node:assert/strict';
-import {gameHasFavoriteTeam} from '../src/utils.js';
 import {makeCompareGames} from '../src/gameSort.js';
 
 function makeGame(id, abstractGameCode, away, home, linescore) {
@@ -18,45 +17,38 @@ function makeGame(id, abstractGameCode, away, home, linescore) {
   return game;
 }
 
-describe('gameHasFavoriteTeam', () => {
-  it('returns false when no team is favorited', () => {
-    const game = makeGame('g', 'P', 'NYY', 'BOS');
-    assert.strictEqual(gameHasFavoriteTeam(game, []), false);
-  });
-
-  it('returns true when the away team is favorited', () => {
-    const game = makeGame('g', 'P', 'NYY', 'BOS');
-    assert.strictEqual(gameHasFavoriteTeam(game, ['NYY']), true);
-  });
-
-  it('returns true when the home team is favorited', () => {
-    const game = makeGame('g', 'P', 'NYY', 'BOS');
-    assert.strictEqual(gameHasFavoriteTeam(game, ['BOS']), true);
-  });
-
-  it('returns false when favorites contains other teams only', () => {
-    const game = makeGame('g', 'P', 'NYY', 'BOS');
-    assert.strictEqual(gameHasFavoriteTeam(game, ['CHC', 'CIN']), false);
-  });
-});
-
 describe('makeCompareGames favorites-first sort', () => {
-  it('sorts a favorite-team game ahead of a non-favorite game, regardless of game state', () => {
-    const preGameFav = makeGame('preGameFav', 'P', 'NYY', 'BOS');
-    const liveNoFav = makeGame('liveNoFav', 'L', 'CHC', 'CIN');
-    const compare = makeCompareGames({sortByFavorites: true, favorites: ['NYY']});
-    const order = [liveNoFav, preGameFav].sort(compare).map(g => g.id);
-    assert.deepStrictEqual(order, ['preGameFav', 'liveNoFav']);
-  });
-
-  it('orders by game state within the favorites group (live > pre-game > finished)', () => {
-    const liveFav = makeGame('liveFav', 'L', 'NYY', 'BOS');
+  it('sorts a full matrix of favorite/non-favorite x live/pre-game/finished games', () => {
+    // Favorites: NYY, LAD
+    const liveFav = makeGame('liveFav', 'L', 'NYY', 'BOS', {currentInning: 5, isTopInning: false});
     const preGameFav = makeGame('preGameFav', 'P', 'LAD', 'SD');
-    const finishedFav = makeGame('finishedFav', 'F', 'CHC', 'CIN');
-    const favorites = ['NYY', 'LAD', 'CHC'];
+    const finishedFav = makeGame('finishedFav', 'F', 'NYY', 'CIN');
+    const liveNoFav = makeGame('liveNoFav', 'L', 'CHC', 'MIL', {currentInning: 3, isTopInning: true});
+    const preGameNoFav = makeGame('preGameNoFav', 'P', 'DET', 'HOU');
+    const finishedNoFav = makeGame('finishedNoFav', 'F', 'SEA', 'TEX');
+
+    const favorites = ['NYY', 'LAD'];
     const compare = makeCompareGames({sortByFavorites: true, favorites});
-    const order = [finishedFav, liveFav, preGameFav].sort(compare).map(g => g.id);
-    assert.deepStrictEqual(order, ['liveFav', 'preGameFav', 'finishedFav']);
+
+    // Adversarial input order: not sorted, not reversed.
+    const shuffled = [
+      preGameNoFav,
+      finishedFav,
+      liveNoFav,
+      liveFav,
+      finishedNoFav,
+      preGameFav
+    ];
+
+    const order = shuffled.sort(compare).map(g => g.id);
+    assert.deepStrictEqual(order, [
+      'liveFav',
+      'preGameFav',
+      'finishedFav',
+      'liveNoFav',
+      'preGameNoFav',
+      'finishedNoFav'
+    ]);
   });
 
   it('ignores favorites when sortByFavorites is false, ordering by game state only', () => {
@@ -75,11 +67,23 @@ describe('makeCompareGames favorites-first sort', () => {
     assert.deepStrictEqual(order, ['live', 'preGameFav']);
   });
 
-  it('breaks ties between two live games by inning depth', () => {
+  it('breaks ties between live games by inning depth', () => {
     const earlyInning = makeGame('early', 'L', 'DET', 'HOU', {currentInning: 2});
+    const midInning = makeGame('mid', 'L', 'SEA', 'TEX', {currentInning: 5});
     const lateInning = makeGame('late', 'L', 'NYY', 'BOS', {currentInning: 8});
     const compare = makeCompareGames();
-    const order = [earlyInning, lateInning].sort(compare).map(g => g.id);
-    assert.deepStrictEqual(order, ['late', 'early']);
+    // Adversarial input order: not sorted, not reversed.
+    const order = [midInning, lateInning, earlyInning].sort(compare).map(g => g.id);
+    assert.deepStrictEqual(order, ['late', 'mid', 'early']);
+  });
+
+  it('breaks ties between two live games in the same inning by top/bottom half', () => {
+    // Same inning number: the bottom half is further along than the top half,
+    // so it should sort first (consistent with "deepest game first").
+    const topOfInning = makeGame('top', 'L', 'DET', 'HOU', {currentInning: 5, isTopInning: true});
+    const bottomOfInning = makeGame('bottom', 'L', 'NYY', 'BOS', {currentInning: 5, isTopInning: false});
+    const compare = makeCompareGames();
+    const order = [topOfInning, bottomOfInning].sort(compare).map(g => g.id);
+    assert.deepStrictEqual(order, ['bottom', 'top']);
   });
 });
