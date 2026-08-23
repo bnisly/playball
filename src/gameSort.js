@@ -62,6 +62,9 @@ export function makeCompareGames({sortByFavorites = false, favorites = []} = {})
       return stateCompare;
     }
 
+    // Finally, break ties between two live games by inning depth, so the
+    // games furthest along appear first. Only live games have an inning to
+    // compare, so pre-game and finished games keep their existing order.
     if (a.status.abstractGameCode === 'L') {
       const inningCompare = compareGameInnings(a, b);
       if (inningCompare !== 0) {
